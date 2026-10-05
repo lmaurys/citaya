@@ -20,5 +20,5 @@ slo:
 error_budget:
   # Minutos de indisponibilidad que podemos "gastar" en la ventana sin incumplir el SLO.
   # Fórmula: ventana_dias × 24 × 60 × (100 − objetivo) / 100
-  minutos: 200
+  minutos: 216
   politica_si_se_agota: se congelan funcionalidades y solo se despliegan arreglos de fiabilidad           # p. ej. "se congelan funcionalidades y solo se despliegan arreglos de fiabilidad"
