@@ -1,0 +1,170 @@
+# LAB 2 (Azure DevOps) · Pipeline de despliegue de CitaYa.
+#
+#   1 · commit  →  2 · build  →  3 · aceptación  →  4 · producción  →  5 · verificación
+#   (lint+unit)    (artefacto)    (sobre el         (aprobación en     (humo: ¿mismo SHA?)
+#                                  artefacto)         el Environment)
+#
+# Build once, deploy many: el artefacto "citaya-dist" se publica UNA vez en build y es el
+# mismo que se prueba en aceptación y el mismo que llega a producción.
+#
+# DESTINO de producción (parámetro "destino"):
+#   simulado → no necesita suscripción de Azure. La etapa 4 pasa la aprobación y "publica" el
+#              artefacto; la etapa 5 lo sirve y verifica que lleva el SHA del commit.
+#   swa      → Azure Static Web Apps (plan Free). Requiere la variable secreta SWA_TOKEN
+#              (deployment token) y URL_PRODUCCION (ver LAB2-AzureDevOps.md, paso 1).
+trigger:
+  branches:
+    include: [main]
+
+parameters:
+  - name: destino
+    displayName: Destino de producción
+    type: string
+    default: simulado
+    values: [simulado, swa]
+  - name: agente
+    displayName: Agente (hospedado de Microsoft o propio)
+    type: string
+    default: hospedado
+    values: [hospedado, propio]
+
+variables:
+  URL_PRODUCCION: ""   # p. ej. https://<nombre>.azurestaticapps.net (solo con destino swa)
+
+pool:
+  ${{ if eq(parameters.agente, 'hospedado') }}:
+    vmImage: ubuntu-latest
+  ${{ else }}:
+    name: Default
+
+stages:
+  - stage: commit
+    displayName: 1 · commit
+    jobs:
+      - job: commit
+        displayName: Lint y pruebas unitarias
+        steps:
+          - task: UseNode@1
+            inputs:
+              version: "22.x"
+          - script: npm run lint
+            displayName: Lint
+          - script: node labs/azure-devops/pruebas.mjs unit $(Common.TestResultsDirectory)
+            displayName: Pruebas unitarias
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "*.xml"
+              searchFolder: $(Common.TestResultsDirectory)
+              testRunTitle: Unitarias
+
+  - stage: build
+    displayName: 2 · build
+    dependsOn: commit
+    jobs:
+      - job: build
+        displayName: Construir el artefacto
+        steps:
+          - task: UseNode@1
+            inputs:
+              version: "22.x"
+          - script: npm run build
+            displayName: dist + version.json
+            env:
+              GITHUB_SHA: $(Build.SourceVersion)      # build.js lo escribe en version.json
+              GITHUB_RUN_NUMBER: $(Build.BuildNumber)
+          - publish: dist
+            artifact: citaya-dist
+            displayName: Publicar el artefacto (una sola vez)
+
+  - stage: aceptacion
+    displayName: 3 · aceptación
+    dependsOn: build
+    jobs:
+      - job: aceptacion
+        displayName: Pruebas de aceptación sobre el artefacto
+        steps:
+          - task: UseNode@1
+            inputs:
+              version: "22.x"
+          - download: current
+            artifact: citaya-dist
+            displayName: Descargar EL MISMO artefacto
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: $(Pipeline.Workspace)/citaya-dist
+              TargetFolder: $(Build.SourcesDirectory)/dist
+          - script: node labs/azure-devops/pruebas.mjs aceptacion $(Common.TestResultsDirectory)
+            displayName: Servir dist y lanzar las pruebas de aceptación
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "*.xml"
+              searchFolder: $(Common.TestResultsDirectory)
+              testRunTitle: Aceptación
+
+  - stage: produccion
+    displayName: 4 · producción
+    dependsOn: aceptacion
+    # Solo se despliega desde main. En un pull request el pipeline llega hasta aceptación.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: produccion
+        displayName: Desplegar
+        # Las aprobaciones se configuran en Pipelines → Environments → citaya-produccion → Approvals and checks.
+        environment: citaya-produccion
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: citaya-dist
+                - ${{ if eq(parameters.destino, 'swa') }}:
+                    - task: AzureStaticWebApp@0
+                      displayName: Desplegar en Azure Static Web Apps
+                      inputs:
+                        cwd: $(Pipeline.Workspace)/citaya-dist
+                        app_location: /
+                        skip_app_build: true
+                        skip_api_build: true
+                        azure_static_web_apps_api_token: $(SWA_TOKEN)
+                - ${{ else }}:
+                    - script: 'echo Producción simulada - se publica el artefacto citaya-dist del commit $(Build.SourceVersion)'
+                      displayName: Desplegar (simulado)
+
+  - stage: verificacion
+    displayName: 5 · verificación
+    dependsOn: produccion
+    jobs:
+      - job: verificacion
+        displayName: Pruebas de humo
+        steps:
+          - task: UseNode@1
+            inputs:
+              version: "22.x"
+          - ${{ if eq(parameters.destino, 'swa') }}:
+              - script: node labs/azure-devops/pruebas.mjs humo $(Common.TestResultsDirectory)
+                displayName: Humo contra la URL pública
+                env:
+                  BASE_URL: $(URL_PRODUCCION)
+                  EXPECTED_SHA: $(Build.SourceVersion)
+          - ${{ else }}:
+              - download: current
+                artifact: citaya-dist
+              - task: CopyFiles@2
+                inputs:
+                  SourceFolder: $(Pipeline.Workspace)/citaya-dist
+                  TargetFolder: $(Build.SourcesDirectory)/dist
+              - script: node labs/azure-devops/pruebas.mjs humo $(Common.TestResultsDirectory)
+                displayName: Humo contra la producción simulada
+                env:
+                  EXPECTED_SHA: $(Build.SourceVersion)
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "*.xml"
+              searchFolder: $(Common.TestResultsDirectory)
+              testRunTitle: Humo

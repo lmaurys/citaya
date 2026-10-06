@@ -1,0 +1,36 @@
+# LAB 1 (Azure DevOps) · Etapa de commit: feedback rápido en cada push y en cada pull request.
+# Pipeline "ci". La política de rama de main lo exige como "Build validation" (LAB 1, paso 6).
+trigger:
+  branches:
+    include: ["*"]
+
+parameters:
+  - name: agente
+    displayName: Agente (hospedado de Microsoft o propio)
+    type: string
+    default: hospedado
+    values: [hospedado, propio]
+
+pool:
+  ${{ if eq(parameters.agente, 'hospedado') }}:
+    vmImage: ubuntu-latest
+  ${{ else }}:
+    name: Default
+
+steps:
+  - task: UseNode@1
+    displayName: Node.js 22
+    inputs:
+      version: "22.x"
+  - script: npm run lint
+    displayName: Lint
+  - script: node labs/azure-devops/pruebas.mjs unit $(Common.TestResultsDirectory)
+    displayName: Pruebas unitarias
+  - task: PublishTestResults@2
+    displayName: Publicar resultados (pestaña Tests)
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: "*.xml"
+      searchFolder: $(Common.TestResultsDirectory)
+      testRunTitle: Unitarias
