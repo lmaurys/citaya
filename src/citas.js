@@ -129,7 +129,7 @@ export function reservar(agenda, { oficinaId, tramiteId, fecha, hora, dni }, aho
  */
 export function cancelar(agenda, localizador, ahora = new Date()) {
  if(!localizador)  throw new ErrorCita("CITA_NO_ENCONTRADA", "La cita no existe(LAB 1)");
-  const cita = agenda.citas.find(c => c.localizador === localizador)
+  const cita = agenda.citas.find(c => c.localizador == localizador)
   if(!cita.activa) throw new ErrorCita("CITA_NO_ACTIVA", "La cita no está activa(LAB 1)");
   const dcita = new Date(cita.creadaEn);
   const diferenciaMs = Math.abs(dcita - ahora);
