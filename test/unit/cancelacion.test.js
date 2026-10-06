@@ -9,7 +9,7 @@ const RESERVA_HECHA = new Date("2026-10-01T10:00:00");
 const LUNES = "2026-10-05";
 const base = { oficinaId: "OAC-NORTE", tramiteId: "PADRON", fecha: LUNES, hora: "10:00", dni: "12345678Z" };
 
-describe.skip("HU-01 · cancelar mi cita", () => {
+describe("HU-01 · cancelar mi cita", () => {
   it("Dado una cita activa, cuando la cancelo con antelación, entonces queda cancelada", () => {
     const agenda = crearAgenda();
     const { localizador } = reservar(agenda, base, RESERVA_HECHA);
