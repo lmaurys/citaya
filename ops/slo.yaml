@@ -3,15 +3,15 @@
 # el SLA con la Concejalía es más laxo (99 %) y el SLO es más exigente para tener margen.
 
 servicio: CitaYa · cita previa de la sede electrónica
-responsable: ???                      # tu nombre o el del equipo
+responsable: Sisco                    # tu nombre o el del equipo
 
 sla_con_negocio:
   disponibilidad_mensual: 99.0        # % comprometido con la Concejalía (consecuencias si se incumple)
 
 sli:
   nombre: disponibilidad
-  definicion: ???                     # p. ej. "% de peticiones a la portada con respuesta 200 en < 2 s"
-  fuente: ???                         # de dónde sale el dato (sonda externa, logs del balanceador...)
+  definicion: "% de peticiones a la portada con respuesta 200 en < 2 s                     # p. ej. "% de peticiones a la portada con respuesta 200 en < 2 s"
+  fuente: logs                        # de dónde sale el dato (sonda externa, logs del balanceador...)
 
 slo:
   objetivo: 99.5                      # % en ventana móvil
@@ -20,5 +20,5 @@ slo:
 error_budget:
   # Minutos de indisponibilidad que podemos "gastar" en la ventana sin incumplir el SLO.
   # Fórmula: ventana_dias × 24 × 60 × (100 − objetivo) / 100
-  minutos: ???
-  politica_si_se_agota: ???           # p. ej. "se congelan funcionalidades y solo se despliegan arreglos de fiabilidad"
+  minutos: 216
+  politica_si_se_agota: se congelan funcionalidades y solo se despliegan arreglos de fiabilidad           # p. ej. "se congelan funcionalidades y solo se despliegan arreglos de fiabilidad"
